@@ -24,10 +24,11 @@ type GoCron struct {
 	core     *cronV3.Cron
 }
 
-func NewGoCron(redis orm.RedisClientInterface, opts ...cronV3.Option) GoCronInterface {
+func NewGoCron(redis orm.RedisClientInterface, missions *mission, opts ...cronV3.Option) GoCronInterface {
 	c := &GoCron{
-		redis: redis,
-		core:  cronV3.New(opts...),
+		redis:    redis,
+		missions: missions,
+		core:     cronV3.New(opts...),
 	}
 	return c
 }
