@@ -13,7 +13,6 @@ func main() {
 		fmt.Println("hi")
 	})
 	fmt.Println(c.Entries())
-	c.Start()
 	select {}
 }
 
