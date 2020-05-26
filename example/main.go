@@ -7,7 +7,7 @@ import (
 
 func main() {
 	c := cron.New(cron.WithSeconds())
-	c.Start()
+	go c.Start()
 	spec := "* * * * * *"
 	c.AddFunc(spec, func() {
 		fmt.Println("hi")

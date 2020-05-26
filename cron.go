@@ -14,6 +14,7 @@ const (
 type GoCronInterface interface {
 	Run()
 	Stop()
+	GetCore() *cronV3.Cron
 	AddScheduler(s *Scheduler) error
 	RemoveScheduler(s *Scheduler) error
 }
@@ -33,9 +34,14 @@ func NewGoCron(redis orm.RedisClientInterface, missions *mission, opts ...cronV3
 	return c
 }
 
+//GetCore 取得核心
+func (g *GoCron) GetCore() *cronV3.Cron {
+	return g.core
+}
+
 //Run 啟動排程
 func (g *GoCron) Run() {
-	g.core.Run()
+	g.core.Start()
 }
 
 //Stop 結束排程
