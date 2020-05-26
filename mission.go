@@ -11,8 +11,10 @@ type mission struct {
 
 var Missions *mission
 
-func init() {
-	Missions = new(mission)
+func NewMission() *mission {
+	return &mission{
+		content: make(map[string]cronV3.Job),
+	}
 }
 
 //AddMission 擴充任務
