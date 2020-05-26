@@ -70,7 +70,7 @@ func (g *GoCron) RemoveCronRecord(s SchedulerInterface) error {
 //AddCron 加入排程
 func (g *GoCron) AddCronRecord(id cronV3.EntryID, s SchedulerInterface) error {
 	key := cron + s.GetTaskName()
-	if err := g.redis.SetKeyValue(key, id, 0); err == nil {
+	if err := g.redis.SetKeyValue(key, int(id), 0); err == nil {
 		return nil
 	} else {
 		return err
