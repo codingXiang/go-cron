@@ -44,10 +44,14 @@ func (g *GoCron) Stop() {
 }
 
 //CheckCron 檢查排程是否存在（用於多 instance)
-func (g *GoCron) CheckCronRecord(s SchedulerInterface) (int, error) {
+func (g *GoCron) CheckCronRecord(s SchedulerInterface) (cronV3.EntryID, error) {
 	key := cron + s.GetTaskName()
 	if val, err := g.redis.GetValue(key); err == nil && val != "" {
-		return strconv.Atoi(val)
+		if id, err := strconv.Atoi(val); err == nil {
+			return cronV3.EntryID(id), nil
+		} else {
+			return 0, err
+		}
 	} else {
 		return 0, err
 	}
