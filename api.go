@@ -113,6 +113,7 @@ func (s *SchedulerService) GetScheduler(data SchedulerInterface) (*Scheduler, er
 func (s *SchedulerService) CreateScheduler(data SchedulerInterface) (*Scheduler, error) {
 	if scheduler, err := s.repo.CreateScheduler(data); err == nil {
 		err = s.core.AddScheduler(scheduler)
+		s.core.Run()
 		return scheduler, err
 	} else {
 		return nil, err
