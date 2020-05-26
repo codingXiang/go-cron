@@ -6,7 +6,7 @@ import (
 )
 
 type mission struct {
-	content map[string]*cronV3.Job
+	content map[string]cronV3.Job
 }
 
 var Missions *mission
@@ -16,13 +16,13 @@ func init() {
 }
 
 //AddMission 擴充任務
-func (m *mission) AddMission(name string, job *cronV3.Job) *mission {
+func (m *mission) AddMission(name string, job cronV3.Job) *mission {
 	m.content[name] = job
 	return m
 }
 
 //GetJob 取得 job
-func (m *mission) GetJob(name string) (*cronV3.Job, error) {
+func (m *mission) GetJob(name string) (cronV3.Job, error) {
 	if out := m.content[name]; out != nil {
 		return out, nil
 	} else {

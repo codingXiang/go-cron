@@ -78,7 +78,7 @@ func (g *GoCron) AddScheduler(s *Scheduler) error {
 	if id, err := g.CheckCronRecord(s); id == 0 || err != nil { //沒有取得紀錄
 		//透過 Scheduler 的 task name 取得 job
 		if job, err := g.missions.GetJob(s.GetTaskName()); err == nil {
-			if id, err := g.core.AddJob(s.GetSpec(), *job); err == nil {
+			if id, err := g.core.AddJob(s.GetSpec(), job); err == nil {
 				if err := g.AddCronRecord(id, s); err == nil {
 					return nil
 				} else {
