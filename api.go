@@ -1,14 +1,17 @@
 package go_cron
 
 import (
+	"errors"
 	"github.com/astaxie/beego/validation"
 	"github.com/codingXiang/cxgateway/delivery"
 	"github.com/codingXiang/cxgateway/pkg/e"
 	"github.com/codingXiang/cxgateway/pkg/i18n"
 	"github.com/codingXiang/cxgateway/pkg/util"
+	"github.com/codingXiang/go-logger"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/jinzhu/gorm"
+	cronV3 "github.com/robfig/cron/v3"
 	"strconv"
 )
 
@@ -91,6 +94,7 @@ type Service interface {
 	UpdateScheduler(data SchedulerInterface) (*Scheduler, error)
 	ModifyScheduler(m SchedulerInterface, data map[string]interface{}) (*Scheduler, error)
 	DeleteScheduler(data SchedulerInterface) error
+	Stop(id cronV3.EntryID)
 }
 
 type SchedulerService struct {
@@ -102,6 +106,10 @@ func NewSchedulerService(core GoCronInterface, repo Repository) Service {
 	return &SchedulerService{core: core, repo: repo}
 }
 
+func (s *SchedulerService) Stop(id cronV3.EntryID) {
+	s.core.Stop()
+}
+
 func (s *SchedulerService) GetSchedulerList(data map[string]interface{}) ([]*Scheduler, error) {
 	return s.repo.GetSchedulerList(data)
 }
@@ -111,17 +119,52 @@ func (s *SchedulerService) GetScheduler(data SchedulerInterface) (*Scheduler, er
 }
 
 func (s *SchedulerService) CreateScheduler(data SchedulerInterface) (*Scheduler, error) {
-	if scheduler, err := s.repo.CreateScheduler(data); err == nil {
-		err = s.core.AddScheduler(scheduler)
-		s.core.Run()
-		return scheduler, err
+	//新增排程
+	if err := s.core.AddScheduler(data); err == nil {
+		//新增資料庫資料
+		if scheduler, err := s.repo.CreateScheduler(data); err == nil {
+			//啟動排程
+			s.core.Start()
+			return scheduler, err
+		} else {
+			return nil, err
+		}
 	} else {
 		return nil, err
 	}
 }
 
 func (s *SchedulerService) UpdateScheduler(data SchedulerInterface) (*Scheduler, error) {
-	return s.repo.UpdateScheduler(data)
+	//查詢排程是否相同
+	if oldScheduler, err := s.repo.GetScheduler(data); err == nil {
+		newScheduler := data.(*Scheduler)
+		if oldScheduler == newScheduler {
+			return oldScheduler, nil
+		}
+	} else {
+		//排程內容不相同
+		//首先先移除排程
+		if err := s.core.RemoveScheduler(data); err == nil {
+			//加入 Schedule
+			if err := s.core.AddScheduler(data); err == nil {
+				//更新資料庫資料
+				if scheduler, err := s.repo.UpdateScheduler(data); err == nil {
+					//啟動排程
+					s.core.Start()
+					return scheduler, err
+				} else {
+					return nil, err
+				}
+			} else {
+				return nil, err
+			}
+		} else {
+			//移除失敗
+			logger.Log.Error("Remove Scheduler failed,", err.Error())
+			return nil, err
+		}
+	}
+	return nil, errors.New("")
 }
 
 func (s *SchedulerService) ModifyScheduler(m SchedulerInterface, data map[string]interface{}) (*Scheduler, error) {
@@ -129,7 +172,19 @@ func (s *SchedulerService) ModifyScheduler(m SchedulerInterface, data map[string
 }
 
 func (s *SchedulerService) DeleteScheduler(data SchedulerInterface) error {
-	return s.repo.DeleteScheduler(data)
+	//刪除排程
+	if err := s.core.RemoveScheduler(data); err == nil {
+		//新增資料庫資料
+		if err := s.repo.DeleteScheduler(data); err == nil {
+			//啟動排程
+			s.core.Start()
+			return err
+		} else {
+			return err
+		}
+	} else {
+		return err
+	}
 }
 
 type HttpHandler interface {
@@ -162,7 +217,6 @@ func NewSchedulerHttpHandler(gateway delivery.HttpHandler, svc Service) HttpHand
 	v1.GET("/:id", e.Wrapper(handler.GetScheduler))
 	v1.POST("", e.Wrapper(handler.CreateScheduler))
 	v1.PUT("/:id", e.Wrapper(handler.UpdateScheduler))
-	v1.PATCH("/:id", e.Wrapper(handler.ModifyScheduler))
 	v1.DELETE("/:id", e.Wrapper(handler.DeleteScheduler))
 	return handler
 }

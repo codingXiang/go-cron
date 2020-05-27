@@ -12,11 +12,11 @@ const (
 )
 
 type GoCronInterface interface {
-	Run()
+	Start()
 	Stop()
 	GetCore() *cronV3.Cron
-	AddScheduler(s *Scheduler) error
-	RemoveScheduler(s *Scheduler) error
+	AddScheduler(s SchedulerInterface) error
+	RemoveScheduler(s SchedulerInterface) error
 }
 
 type GoCron struct {
@@ -39,8 +39,8 @@ func (g *GoCron) GetCore() *cronV3.Cron {
 	return g.core
 }
 
-//Run 啟動排程
-func (g *GoCron) Run() {
+//Start 背景啟動排程
+func (g *GoCron) Start() {
 	g.core.Start()
 }
 
@@ -84,7 +84,7 @@ func (g *GoCron) AddCronRecord(id cronV3.EntryID, s SchedulerInterface) error {
 }
 
 //AddScheduler 新增排程
-func (g *GoCron) AddScheduler(s *Scheduler) error {
+func (g *GoCron) AddScheduler(s SchedulerInterface) error {
 	//判斷 scheduler 是否存在
 	if id, err := g.CheckCronRecord(s); id == 0 || err != nil { //沒有取得紀錄
 		//透過 Scheduler 的 task name 取得 job
@@ -107,7 +107,7 @@ func (g *GoCron) AddScheduler(s *Scheduler) error {
 }
 
 //RemoveScheduler 新增排程
-func (g *GoCron) RemoveScheduler(s *Scheduler) error {
+func (g *GoCron) RemoveScheduler(s SchedulerInterface) error {
 	//判斷 scheduler 是否存在
 	if id, err := g.CheckCronRecord(s); id != 0 || err == nil { //沒有取得紀錄
 		if err := g.RemoveCronRecord(s); err == nil {

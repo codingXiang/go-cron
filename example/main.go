@@ -7,12 +7,11 @@ import (
 
 func main() {
 	c := cron.New(cron.WithSeconds())
-	go c.Start()
-	spec := "* * * * * *"
+	spec := "*/2 * * * * *"
 	c.AddFunc(spec, func() {
 		fmt.Println("hi")
 	})
 	fmt.Println(c.Entries())
+	c.Start()
 	select {}
 }
-
