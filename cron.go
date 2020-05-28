@@ -111,7 +111,7 @@ func (g *GoCron) RemoveScheduler(s SchedulerInterface) error {
 	//判斷 scheduler 是否存在
 	if id, err := g.CheckCronRecord(s); id != 0 || err == nil { //沒有取得紀錄
 		if err := g.RemoveCronRecord(s); err == nil {
-			g.Run()
+			g.Start()
 			return nil
 		} else {
 			return err
