@@ -368,10 +368,14 @@ func (g *SchedulerHttpHandler) DeleteScheduler(c *gin.Context) error {
 		g.i18nMsg.ParameterIntError(strId, err)
 	}
 
-	if err := g.svc.DeleteScheduler(data); err != nil {
-		return g.i18nMsg.DeleteError(err)
+	if result, err := g.svc.GetScheduler(data); err != nil {
+		return g.i18nMsg.GetError(err)
 	} else {
-		c.JSON(g.i18nMsg.DeleteSuccess(nil))
-		return nil
+		if err := g.svc.DeleteScheduler(result); err != nil {
+			return g.i18nMsg.DeleteError(err)
+		} else {
+			c.JSON(g.i18nMsg.DeleteSuccess(nil))
+			return nil
+		}
 	}
 }
