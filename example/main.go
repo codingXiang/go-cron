@@ -75,5 +75,5 @@ type Test struct {
 
 func (t *Test) Run() {
 	fmt.Println(t.GetHostName() + " " + t.GetName())
-	t.UpdateRedisData(nil)
+	t.UpdateRedisData("test", nil)
 }

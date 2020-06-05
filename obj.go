@@ -18,7 +18,7 @@ type BasicJobInterface interface {
 	GetHostName() string
 	SetSvc(svc Service)
 	GetSvc() Service
-	UpdateRedisData(errMsg error)
+	UpdateRedisData(taskName string, errMsg error)
 	Run()
 }
 
@@ -63,7 +63,7 @@ func (b *BasicJob) GetHostName() string {
 
 func (b *BasicJob) Run() {}
 
-func (b *BasicJob) UpdateRedisData(errMsg error) {
+func (b *BasicJob) UpdateRedisData(taskName string, errMsg error) {
 	key := "cron_" + b.GetName()
 	hostname, err := os.Hostname()
 	isSuccess := true
@@ -79,7 +79,7 @@ func (b *BasicJob) UpdateRedisData(errMsg error) {
 			errMsg = errors.New("")
 		}
 		b.GetSvc().CreateSchedulerLog(&SchedulerLog{
-			TaskName: data.Scheduler.TaskName,
+			TaskName: taskName,
 			HostName: hostname,
 			Success:  isSuccess,
 			Message:  errMsg.Error(),
