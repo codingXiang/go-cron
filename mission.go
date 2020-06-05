@@ -2,29 +2,28 @@ package go_cron
 
 import (
 	"errors"
-	cronV3 "github.com/robfig/cron/v3"
 )
 
 type mission struct {
-	content map[string]cronV3.Job
+	content map[string]BasicJobInterface
 }
 
 var Missions *mission
 
 func NewMission() *mission {
 	return &mission{
-		content: make(map[string]cronV3.Job),
+		content: make(map[string]BasicJobInterface),
 	}
 }
 
 //AddMission 擴充任務
-func (m *mission) AddMission(name string, job cronV3.Job) *mission {
-	m.content[name] = job
+func (m *mission) AddMission(job BasicJobInterface) *mission {
+	m.content[job.GetName()] = job
 	return m
 }
 
 //GetJob 取得 job
-func (m *mission) GetJob(name string) (cronV3.Job, error) {
+func (m *mission) GetJob(name string) (BasicJobInterface, error) {
 	if out := m.content[name]; out != nil {
 		return out, nil
 	} else {
