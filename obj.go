@@ -19,6 +19,7 @@ type BasicJobInterface interface {
 	SetSvc(svc Service)
 	GetSvc() Service
 	UpdateRedisData(errMsg error)
+	Run()
 }
 
 type BasicJob struct {
@@ -59,6 +60,8 @@ func (b *BasicJob) GetName() string {
 func (b *BasicJob) GetHostName() string {
 	return b.HostName
 }
+
+func (b *BasicJob) Run() {}
 
 func (b *BasicJob) UpdateRedisData(errMsg error) {
 	key := "cron_" + b.GetName()
