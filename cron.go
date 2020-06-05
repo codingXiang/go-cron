@@ -1,28 +1,41 @@
 package go_cron
 
 import (
-	"errors"
+	"encoding/json"
+	"github.com/codingXiang/go-logger"
 	"github.com/codingXiang/go-orm"
 	cronV3 "github.com/robfig/cron/v3"
-	"strconv"
+	"time"
 )
 
 const (
-	cron = "cron_"
+	Cron = "cron_"
 )
 
 type GoCronInterface interface {
 	Start()
 	Stop()
 	GetCore() *cronV3.Cron
-	AddScheduler(s SchedulerInterface) error
+	AddScheduler(s SchedulerInterface) (*RedisData, error)
 	RemoveScheduler(s SchedulerInterface) error
 }
 
-type GoCron struct {
-	redis    orm.RedisClientInterface
-	missions *mission
-	core     *cronV3.Cron
+type (
+	GoCron struct {
+		redis    orm.RedisClientInterface
+		missions *mission
+		core     *cronV3.Cron
+	}
+	RedisData struct {
+		ID          cronV3.EntryID `json:"id"`
+		Scheduler   *Scheduler     `json:"scheduler"`
+		PreExecTime string         `json:"PreExecTime"`
+	}
+)
+
+func StartSchedulerListener(spec string, s Service) {
+	logger.Log.Info("Start scheduler listener, check frequency =", spec)
+	s.Listen(spec)
 }
 
 func NewGoCron(redis orm.RedisClientInterface, missions *mission, opts ...cronV3.Option) GoCronInterface {
@@ -49,23 +62,32 @@ func (g *GoCron) Stop() {
 	g.core.Stop()
 }
 
-//CheckCron 檢查排程是否存在（用於多 instance)
-func (g *GoCron) CheckCronRecord(s SchedulerInterface) (cronV3.EntryID, error) {
-	key := cron + s.GetTaskName()
-	if val, err := g.redis.GetValue(key); err == nil && val != "" {
-		if id, err := strconv.Atoi(val); err == nil {
-			return cronV3.EntryID(id), nil
-		} else {
-			return 0, err
+//CheckCronRecordIsExist 檢查排程是否存在（用於多 instance)
+func (g *GoCron) CheckCronRecordIsExist(s SchedulerInterface) (*RedisData, error) {
+	key := Cron + s.GetTaskName()
+	//檢查 redis 中是否有相關的 key
+	val, err := g.redis.GetValue(key)
+	if err == nil {
+		var (
+			data = new(RedisData)
+		)
+		e := json.Unmarshal([]byte(val), data)
+		//轉換格式
+		if e != nil {
+			logger.Log.Error(e.Error())
+			return nil, e
 		}
+		logger.Log.Debug("data exist in redis")
+		return data, nil
 	} else {
-		return 0, err
+		logger.Log.Debug("data not in redis")
+		return nil, err
 	}
 }
 
 //RemoveCronRecord 移除排程紀錄（用於多 instance)
 func (g *GoCron) RemoveCronRecord(s SchedulerInterface) error {
-	key := cron + s.GetTaskName()
+	key := Cron + s.GetTaskName()
 	if err := g.redis.RemoveKey(key); err == nil {
 		return nil
 	} else {
@@ -74,9 +96,17 @@ func (g *GoCron) RemoveCronRecord(s SchedulerInterface) error {
 }
 
 //AddCron 加入排程
-func (g *GoCron) AddCronRecord(id cronV3.EntryID, s SchedulerInterface) error {
-	key := cron + s.GetTaskName()
-	if err := g.redis.SetKeyValue(key, int(id), 0); err == nil {
+func (g *GoCron) AddCronRecord(entry cronV3.Entry, s SchedulerInterface) error {
+	key := Cron + s.GetTaskName()
+	data := RedisData{
+		ID:        entry.ID,
+		Scheduler: s.(*Scheduler),
+	}
+	tmp, _ := json.Marshal(data)
+	logger.Log.Debug("add cron record", string(tmp))
+	duration := entry.Next.Sub(time.Now())
+
+	if err := g.redis.SetKeyValue(key, string(tmp), duration*2); err == nil {
 		return nil
 	} else {
 		return err
@@ -84,33 +114,50 @@ func (g *GoCron) AddCronRecord(id cronV3.EntryID, s SchedulerInterface) error {
 }
 
 //AddScheduler 新增排程
-func (g *GoCron) AddScheduler(s SchedulerInterface) error {
+func (g *GoCron) AddScheduler(s SchedulerInterface) (*RedisData, error) {
 	//判斷 scheduler 是否存在
-	if id, err := g.CheckCronRecord(s); id == 0 || err != nil { //沒有取得紀錄
+	if data, err := g.CheckCronRecordIsExist(s); data == nil || err != nil { //沒有取得紀錄
+		//如果排程狀態為刪除，則跳過
+		if s.GetDeleteAt() != nil {
+			return nil, nil
+		}
+
 		//透過 Scheduler 的 task name 取得 job
 		if job, err := g.missions.GetJob(s.GetTaskName()); err == nil {
 			if id, err := g.core.AddJob(s.GetSpec(), job); err == nil {
-				if err := g.AddCronRecord(id, s); err == nil {
-					return nil
+				entry := g.GetCore().Entry(id)
+				if err := g.AddCronRecord(entry, s); err != nil {
+					return nil, err
 				} else {
-					return err
+					return nil, nil
 				}
 			} else {
-				return err
+				return nil, err
 			}
 		} else {
-			return err
+			return nil, err
 		}
 	} else {
-		return errors.New("cron record is exist")
+		//時程更新
+		if s.GetSpec() != data.Scheduler.GetSpec() || s.GetDeleteAt() != nil{
+			key := Cron + data.Scheduler.TaskName
+			if data, err := ParseCronRedisData(key); err == nil {
+				g.core.Remove(data.ID)
+				orm.RedisORM.SetKeyValue(key, nil, -5)
+			}
+		}
+		if s.GetDeleteAt() != nil {
+			orm.DatabaseORM.GetInstance().Unscoped().Delete(s.(*Scheduler))
+		}
+		return data, nil
 	}
 }
 
 //RemoveScheduler 新增排程
 func (g *GoCron) RemoveScheduler(s SchedulerInterface) error {
 	//判斷 scheduler 是否存在
-	if id, err := g.CheckCronRecord(s); id != 0 || err == nil { //沒有取得紀錄
-		g.core.Remove(id)
+	if data, err := g.CheckCronRecordIsExist(s); data != nil || err == nil { //沒有取得紀錄
+		g.core.Remove(data.ID)
 		if err := g.RemoveCronRecord(s); err == nil {
 			g.Start()
 			return nil

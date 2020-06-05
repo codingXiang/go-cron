@@ -1,0 +1,11 @@
+# 模組 redis 快取時間
+expire:
+  project:
+    list: 10
+    get: 10
+    get_repositories: 1
+  repository:
+    list: 10
+    get: 10
+    list_tags: 10
+  user: 10

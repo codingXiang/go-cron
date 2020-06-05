@@ -1,7 +1,7 @@
 package go_cron
 
 import (
-	"errors"
+	"fmt"
 	"github.com/astaxie/beego/validation"
 	"github.com/codingXiang/cxgateway/delivery"
 	"github.com/codingXiang/cxgateway/pkg/e"
@@ -12,13 +12,17 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/jinzhu/gorm"
 	cronV3 "github.com/robfig/cron/v3"
+	"os"
+	"runtime"
 	"strconv"
 )
 
 type Repository interface {
+	GetHostName() string
 	GetSchedulerList(data map[string]interface{}) ([]*Scheduler, error)
 	GetScheduler(data SchedulerInterface) (*Scheduler, error)
 	CreateScheduler(data SchedulerInterface) (*Scheduler, error)
+	CreateSchedulerLog(Data SchedulerLogInterface) (*SchedulerLog, error)
 	UpdateScheduler(data SchedulerInterface) (*Scheduler, error)
 	ModifyScheduler(m SchedulerInterface, data map[string]interface{}) (*Scheduler, error)
 	DeleteScheduler(data SchedulerInterface) error
@@ -32,13 +36,21 @@ func NewSchedulerRepository(orm *gorm.DB) Repository {
 	return &SchedulerRepository{orm: orm}
 }
 
+func (s *SchedulerRepository) GetHostName() string {
+	if hostname, err := os.Hostname(); err == nil {
+		return hostname
+	} else {
+		return "can not catch host name"
+	}
+}
+
 func (s *SchedulerRepository) GetSchedulerList(data map[string]interface{}) ([]*Scheduler, error) {
 	var (
 		err error
 		in  = make([]*Scheduler, 0)
 	)
 
-	err = s.orm.Find(&in, data).Error
+	err = s.orm.Unscoped().Find(&in, data).Error
 	return in, err
 }
 
@@ -56,15 +68,25 @@ func (s *SchedulerRepository) CreateScheduler(data SchedulerInterface) (*Schedul
 		err error
 		in  = data.(*Scheduler)
 	)
+	in.ExecHost = s.GetHostName()
 	err = s.orm.Create(&in).Error
 	return in, err
 }
-
+func (s *SchedulerRepository) CreateSchedulerLog(data SchedulerLogInterface) (*SchedulerLog, error) {
+	var (
+		err error
+		in  = data.(*SchedulerLog)
+	)
+	in.HostName = s.GetHostName()
+	err = s.orm.Create(&in).Error
+	return in, err
+}
 func (s *SchedulerRepository) UpdateScheduler(data SchedulerInterface) (*Scheduler, error) {
 	var (
 		err error
 		in  = data.(*Scheduler)
 	)
+	in.ExecHost = s.GetHostName()
 	err = s.orm.Save(&in).Error
 	return in, err
 }
@@ -74,6 +96,7 @@ func (s *SchedulerRepository) ModifyScheduler(m SchedulerInterface, data map[str
 		err error
 		in  = m.(*Scheduler)
 	)
+	in.ExecHost = s.GetHostName()
 	err = s.orm.Model(&in).Updates(data).Error
 	return in, err
 }
@@ -91,10 +114,11 @@ type Service interface {
 	GetSchedulerList(data map[string]interface{}) ([]*Scheduler, error)
 	GetScheduler(data SchedulerInterface) (*Scheduler, error)
 	CreateScheduler(data SchedulerInterface) (*Scheduler, error)
+	CreateSchedulerLog(Data SchedulerLogInterface) (*SchedulerLog, error)
 	UpdateScheduler(data SchedulerInterface) (*Scheduler, error)
 	ModifyScheduler(m SchedulerInterface, data map[string]interface{}) (*Scheduler, error)
 	DeleteScheduler(data SchedulerInterface) error
-	Stop(id cronV3.EntryID)
+	Listen(spec string) error
 }
 
 type SchedulerService struct {
@@ -106,6 +130,61 @@ func NewSchedulerService(core GoCronInterface, repo Repository) Service {
 	return &SchedulerService{core: core, repo: repo}
 }
 
+func (s *SchedulerService) checkDeleteScheduler(obj *Scheduler) bool {
+	//如果被刪除
+	if obj.GetDeleteAt() != nil {
+		if data, err := ParseCronRedisData(Cron + obj.TaskName); err == nil {
+			s.core.GetCore().Remove(data.ID)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *SchedulerService) tryToAddScheduler(list []*Scheduler) {
+	for _, scheduler := range list {
+		if _, err := s.core.AddScheduler(scheduler); err == nil {
+			logger.Log.Debug("add scheduler success")
+		} else {
+			if err.Error() == "cron record is exist" {
+				logger.Log.Debug("cron record is exist")
+			} else {
+				logger.Log.Error("add scheduler failed, err = ", err.Error())
+			}
+		}
+	}
+}
+
+func (s *SchedulerService) check() {
+	//從資料庫中取得排程列表
+	if schedulerList, err := s.repo.GetSchedulerList(nil); err == nil {
+		nCPU := runtime.NumCPU()
+		nNum := len(schedulerList)
+		for i := 0; i < nCPU; i++ {
+			from := i * nNum / nCPU
+			to := (i + 1) * nNum / nCPU
+			//使用 goroutine 判斷是否可以加入 scheduler
+			go func() { s.tryToAddScheduler(schedulerList[from:to]) }()
+		}
+	} else {
+		logger.Log.Error("get scheduler list failed, err =", err.Error())
+	}
+
+	for _, entry := range s.core.GetCore().Entries() {
+		fmt.Print(entry.ID)
+		fmt.Print(", ")
+	}
+	fmt.Println()
+}
+
+//Listen 監聽排程
+func (s *SchedulerService) Listen(spec string) error {
+	s.core.Start()
+	_, err := s.core.GetCore().AddFunc(spec, s.check)
+	return err
+}
+
+//Stop 停止所有排程
 func (s *SchedulerService) Stop(id cronV3.EntryID) {
 	s.core.Stop()
 }
@@ -119,52 +198,15 @@ func (s *SchedulerService) GetScheduler(data SchedulerInterface) (*Scheduler, er
 }
 
 func (s *SchedulerService) CreateScheduler(data SchedulerInterface) (*Scheduler, error) {
-	//新增排程
-	if err := s.core.AddScheduler(data); err == nil {
-		//新增資料庫資料
-		if scheduler, err := s.repo.CreateScheduler(data); err == nil {
-			//啟動排程
-			s.core.Start()
-			return scheduler, err
-		} else {
-			return nil, err
-		}
-	} else {
-		return nil, err
-	}
+	return s.repo.CreateScheduler(data)
+}
+
+func (s *SchedulerService) CreateSchedulerLog(data SchedulerLogInterface) (*SchedulerLog, error) {
+	return s.repo.CreateSchedulerLog(data)
 }
 
 func (s *SchedulerService) UpdateScheduler(data SchedulerInterface) (*Scheduler, error) {
-	//查詢排程是否相同
-	if oldScheduler, err := s.repo.GetScheduler(data); err == nil {
-		newScheduler := data.(*Scheduler)
-		if oldScheduler == newScheduler {
-			return oldScheduler, nil
-		}
-	} else {
-		//排程內容不相同
-		//首先先移除排程
-		if err := s.core.RemoveScheduler(data); err == nil {
-			//加入 Schedule
-			if err := s.core.AddScheduler(data); err == nil {
-				//更新資料庫資料
-				if scheduler, err := s.repo.UpdateScheduler(data); err == nil {
-					//啟動排程
-					s.core.Start()
-					return scheduler, err
-				} else {
-					return nil, err
-				}
-			} else {
-				return nil, err
-			}
-		} else {
-			//移除失敗
-			logger.Log.Error("Remove Scheduler failed,", err.Error())
-			return nil, err
-		}
-	}
-	return nil, errors.New("")
+	return s.repo.GetScheduler(data)
 }
 
 func (s *SchedulerService) ModifyScheduler(m SchedulerInterface, data map[string]interface{}) (*Scheduler, error) {
@@ -172,19 +214,7 @@ func (s *SchedulerService) ModifyScheduler(m SchedulerInterface, data map[string
 }
 
 func (s *SchedulerService) DeleteScheduler(data SchedulerInterface) error {
-	//刪除排程
-	if err := s.core.RemoveScheduler(data); err == nil {
-		//新增資料庫資料
-		if err := s.repo.DeleteScheduler(data); err == nil {
-			//啟動排程
-			s.core.Start()
-			return err
-		} else {
-			return err
-		}
-	} else {
-		return err
-	}
+	return s.repo.DeleteScheduler(data)
 }
 
 type HttpHandler interface {
