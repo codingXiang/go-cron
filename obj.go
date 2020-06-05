@@ -18,7 +18,7 @@ type BasicJobInterface interface {
 	GetHostName() string
 	SetSvc(svc Service)
 	GetSvc() Service
-	UpdateRedisData(isSuccess bool, errMsg error)
+	UpdateRedisData(errMsg error)
 }
 
 type BasicJob struct {
