@@ -196,7 +196,7 @@ func (s *SchedulerService) CreateSchedulerLog(data SchedulerLogInterface) (*Sche
 }
 
 func (s *SchedulerService) UpdateScheduler(data SchedulerInterface) (*Scheduler, error) {
-	return s.repo.GetScheduler(data)
+	return s.repo.UpdateScheduler(data)
 }
 
 func (s *SchedulerService) ModifyScheduler(m SchedulerInterface, data map[string]interface{}) (*Scheduler, error) {
@@ -237,6 +237,7 @@ func NewSchedulerHttpHandler(gateway delivery.HttpHandler, svc Service) HttpHand
 	v1.GET("/:id", e.Wrapper(handler.GetScheduler))
 	v1.POST("", e.Wrapper(handler.CreateScheduler))
 	v1.PUT("/:id", e.Wrapper(handler.UpdateScheduler))
+	v1.PATCH("/:id", e.Wrapper(handler.ModifyScheduler))
 	v1.DELETE("/:id", e.Wrapper(handler.DeleteScheduler))
 	return handler
 }
