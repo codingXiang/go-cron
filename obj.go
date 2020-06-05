@@ -60,10 +60,12 @@ func (b *BasicJob) GetHostName() string {
 	return b.HostName
 }
 
-func (b *BasicJob) UpdateRedisData(isSuccess bool, errMsg error) {
+func (b *BasicJob) UpdateRedisData(errMsg error) {
 	key := "cron_" + b.GetName()
 	hostname, err := os.Hostname()
+	isSuccess := true
 	if err != nil {
+		isSuccess = false
 		logger.Log.Error(err.Error())
 	}
 	b.SetHostName(hostname)
