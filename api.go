@@ -1,7 +1,6 @@
 package go_cron
 
 import (
-	"fmt"
 	"github.com/astaxie/beego/validation"
 	"github.com/codingXiang/cxgateway/delivery"
 	"github.com/codingXiang/cxgateway/pkg/e"
@@ -166,12 +165,6 @@ func (s *SchedulerService) check() {
 	} else {
 		logger.Log.Error("get scheduler list failed, err =", err.Error())
 	}
-
-	for _, entry := range s.core.GetCore().Entries() {
-		fmt.Print(entry.ID)
-		fmt.Print(", ")
-	}
-	fmt.Println()
 }
 
 //Listen 監聽排程
