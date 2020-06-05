@@ -68,7 +68,6 @@ func (s *SchedulerRepository) CreateScheduler(data SchedulerInterface) (*Schedul
 		err error
 		in  = data.(*Scheduler)
 	)
-	in.ExecHost = s.GetHostName()
 	err = s.orm.Create(&in).Error
 	return in, err
 }
@@ -86,7 +85,6 @@ func (s *SchedulerRepository) UpdateScheduler(data SchedulerInterface) (*Schedul
 		err error
 		in  = data.(*Scheduler)
 	)
-	in.ExecHost = s.GetHostName()
 	err = s.orm.Save(&in).Error
 	return in, err
 }
@@ -96,7 +94,6 @@ func (s *SchedulerRepository) ModifyScheduler(m SchedulerInterface, data map[str
 		err error
 		in  = m.(*Scheduler)
 	)
-	in.ExecHost = s.GetHostName()
 	err = s.orm.Model(&in).Updates(data).Error
 	return in, err
 }
