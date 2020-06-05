@@ -51,8 +51,8 @@ func main() {
 	test1.SetName("test1")
 
 	missions := go_cron.NewMission()
-	missions.AddMission(test.GetName(), test)
-	missions.AddMission(test1.GetName(), test1)
+	missions.AddMission(test)
+	missions.AddMission(test1)
 	core := go_cron.NewGoCron(orm.RedisORM, missions, cron.WithSeconds())
 
 	schedulerRepo := go_cron.NewSchedulerRepository(orm.DatabaseORM.GetInstance())
@@ -64,7 +64,7 @@ func main() {
 	go_cron.AddSvc(schedulerSvc, test, test1)
 	//開始監聽
 	go_cron.StartSchedulerListener("* * * * * *", schedulerSvc)
-	//schedulerSvc.CreateScheduler(&go_cron.Scheduler{TaskName: "test", Spec: "*/5 * * * * *"})
+	schedulerSvc.CreateScheduler(&go_cron.Scheduler{TaskName: "test", Spec: "* * * * * *"})
 
 	select {}
 }
@@ -75,5 +75,5 @@ type Test struct {
 
 func (t *Test) Run() {
 	fmt.Println(t.GetHostName() + " " + t.GetName())
-	t.UpdateRedisData(true, nil)
+	t.UpdateRedisData(nil)
 }
